@@ -1,0 +1,13 @@
+[package]
+name = "run"
+version = "0.1.0"
+edition = "2021"
+description = "Paste shell commands and run them in order"
+publish = false
+
+[[bin]]
+name = "run"
+path = "src/main.rs"
+
+[dependencies]
+libc = "0.2"
