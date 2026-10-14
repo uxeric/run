@@ -222,7 +222,14 @@ fn paste_appears_on_its_own_lines_and_then_runs() {
     let (shown, code) = pty("paste");
     let text = String::from_utf8_lossy(&shown);
     assert_eq!(code, 0, "{text}");
-    assert!(text.contains("Paste commands. Ctrl-D runs them."), "{text}");
+    assert!(
+        text.contains("❯ Paste commands. Ctrl-D runs them."),
+        "{text}"
+    );
+    assert!(
+        !text.contains("\u{1b}[38;2;"),
+        "NO_COLOR still colored the session:\n{text}"
+    );
     assert!(!text.contains("\u{1b}[200~"), "{text}");
     assert!(!text.contains("\u{1b}[201~"), "{text}");
     let first = text.find("printf 'OUT_A").expect("first pasted line");
@@ -232,6 +239,14 @@ fn paste_appears_on_its_own_lines_and_then_runs() {
         text[first..second].contains('\n'),
         "paste did not keep the line break:\n{text}"
     );
+    let seam = text
+        .find('─')
+        .unwrap_or_else(|| panic!("missing seam:\n{text}"));
+    let output = text
+        .find("OUT_A\r\n")
+        .or_else(|| text.find("OUT_A\n"))
+        .unwrap_or_else(|| panic!("missing output:\n{text}"));
+    assert!(second < seam && seam < output, "{text}");
     assert_eq!(text.matches("NO_RUN").count(), 1, "{text}");
     assert!(
         text.contains("OUT_A\r\n") || text.contains("OUT_A\n"),
@@ -252,6 +267,55 @@ fn ctrl_d_runs_typed_lines() {
         text.contains("OUT_C\r\n") || text.contains("OUT_C\n"),
         "{text}"
     );
+}
+
+#[test]
+fn the_prompt_the_seam_and_a_failed_command_use_the_night_city_colors() {
+    let (shown, code) = pty("color");
+    let text = String::from_utf8_lossy(&shown);
+    assert_eq!(code, 1, "{text}");
+    assert!(
+        text.contains("\u{1b}[1;38;2;255;42;109m❯"),
+        "prompt mark:\n{text}"
+    );
+    let invitation = "them.";
+    let invited = text
+        .find(invitation)
+        .map(|at| at + invitation.len())
+        .unwrap_or_else(|| panic!("missing invitation:\n{text}"));
+    let echo = text
+        .find("printf 'OUT_E")
+        .unwrap_or_else(|| panic!("missing echo:\n{text}"));
+    assert!(
+        text[invited..echo].contains("\u{1b}[0m"),
+        "typed text kept the prompt color:\n{text}"
+    );
+    let seam = text
+        .find("\u{1b}[38;2;41;240;255m─")
+        .unwrap_or_else(|| panic!("seam:\n{text}"));
+    let seam_end = text
+        .find("─\u{1b}[0m")
+        .unwrap_or_else(|| panic!("seam did not reset:\n{text}"));
+    let output = text
+        .find("OUT_E\r\n")
+        .or_else(|| text.find("OUT_E\n"))
+        .unwrap_or_else(|| panic!("missing output:\n{text}"));
+    let failed = text
+        .find("\u{1b}[38;2;255;42;109mrun: exited 1")
+        .unwrap_or_else(|| panic!("status:\n{text}"));
+    assert!(
+        echo < seam && seam < seam_end && seam_end < output && output < failed,
+        "{text}"
+    );
+}
+
+#[test]
+fn a_refused_paste_draws_no_seam() {
+    let (shown, code) = pty("refuse");
+    let text = String::from_utf8_lossy(&shown);
+    assert_eq!(code, 2, "{text}");
+    assert!(text.contains("not running anything"), "{text}");
+    assert!(!text.contains('─'), "{text}");
 }
 
 #[test]

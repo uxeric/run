@@ -1,5 +1,6 @@
-//! Read a pasted script. On a terminal, echo it with its newlines and return
-//! when the paste ends or the user presses Ctrl-D. A pipe is read until EOF.
+//! Read a pasted script. On a terminal, show the prompt, echo the paste with
+//! its newlines, and return when the paste ends or the user presses Ctrl-D.
+//! A pipe is read until EOF.
 
 use std::fs::File;
 use std::io::{self, IsTerminal, Read, Write};
@@ -24,6 +25,7 @@ pub fn read_script() -> Result<String, String> {
 struct Term {
     tty: File,
     fd: i32,
+    column: usize,
 }
 
 impl Term {
@@ -40,7 +42,7 @@ impl Term {
             disarm();
             return Err(io::Error::last_os_error());
         }
-        let mut term = Self { tty, fd };
+        let mut term = Self { tty, fd, column: 0 };
         term.tty.write_all(b"\x1b[?2004h")?;
         term.tty.flush()?;
         write_hint(&mut term.tty)?;
@@ -53,7 +55,6 @@ impl Term {
         let mut in_escape = false;
         let mut in_paste = false;
         let mut saw_cr = false;
-        let mut column = 0usize;
         let mut chunk = [0u8; 1024];
 
         loop {
@@ -87,7 +88,6 @@ impl Term {
                             in_escape = false;
                             escape.clear();
                             if !script.is_empty() {
-                                self.separate()?;
                                 return Ok(bytes_to_string(script));
                             }
                         }
@@ -105,16 +105,16 @@ impl Term {
                     break;
                 }
                 if byte == 0x15 && !in_paste {
-                    kill_line(&mut self.tty, &mut script, &mut column)?;
+                    kill_line(&mut self.tty, &mut script, &mut self.column)?;
                     continue;
                 }
                 if (byte == 0x7f || byte == 0x08) && !in_paste {
-                    backspace(&mut self.tty, &mut script, &mut column)?;
+                    backspace(&mut self.tty, &mut script, &mut self.column)?;
                     continue;
                 }
                 if byte == b'\r' {
                     saw_cr = true;
-                    push_newline(&mut self.tty, &mut script, &mut column)?;
+                    push_newline(&mut self.tty, &mut script, &mut self.column)?;
                     continue;
                 }
                 if byte == b'\n' {
@@ -122,41 +122,37 @@ impl Term {
                         saw_cr = false;
                         continue;
                     }
-                    push_newline(&mut self.tty, &mut script, &mut column)?;
+                    push_newline(&mut self.tty, &mut script, &mut self.column)?;
                     continue;
                 }
                 saw_cr = false;
-                push_byte(&mut self.tty, &mut script, &mut column, byte)?;
+                push_byte(&mut self.tty, &mut script, &mut self.column, byte)?;
             }
             self.tty.flush()?;
             if script_ends_input(&chunk[..read as usize], in_paste) {
                 break;
             }
         }
-        if !script.is_empty() {
-            self.separate()?;
-        }
         Ok(bytes_to_string(script))
-    }
-
-    fn separate(&mut self) -> io::Result<()> {
-        self.tty.write_all(b"\n")?;
-        self.tty.flush()
     }
 }
 
 impl Drop for Term {
     fn drop(&mut self) {
+        // Ctrl-D can leave the cursor mid-line. Finish that line before cooked
+        // mode returns, or the seam and the shell prompt continue the typed text.
+        if self.column != 0 {
+            let _ = self.tty.write_all(b"\n");
+            let _ = self.tty.flush();
+        }
         disarm();
     }
 }
 
 fn write_hint(tty: &mut File) -> io::Result<()> {
-    if std::env::var_os("NO_COLOR").is_some() {
-        tty.write_all(b"Paste commands. Ctrl-D runs them.\n")?;
-    } else {
-        tty.write_all(b"\x1b[2mPaste commands. Ctrl-D runs them.\x1b[0m\n")?;
-    }
+    let line = crate::style::prompt_line(&crate::style::Ink::tty());
+    tty.write_all(line.as_bytes())?;
+    tty.write_all(b"\n")?;
     tty.flush()
 }
 

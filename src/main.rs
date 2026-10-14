@@ -1,8 +1,9 @@
 mod input;
+mod style;
 mod update;
 
 use std::env;
-use std::fs::{self, OpenOptions};
+use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::process::ExitStatusExt;
@@ -34,7 +35,7 @@ fn main() -> ExitCode {
     match run() {
         Ok(code) => code,
         Err(error) => {
-            eprintln!("run: {error}");
+            eprintln!("{} {error}", style::Ink::stderr().hot("run:"));
             ExitCode::from(1)
         }
     }
@@ -121,12 +122,16 @@ fn execute(script: &str) -> Result<ExitCode, String> {
     let diagnostic =
         String::from_utf8_lossy(&check.stderr).replace(&files.paste.display().to_string(), "paste");
     if !check.status.success() || heredoc_left_open(&diagnostic) {
-        eprint!("run: not running anything\n{diagnostic}");
+        let refused = style::Ink::stderr().amber("run: not running anything");
+        eprint!("{refused}\n{diagnostic}");
         if !diagnostic.ends_with('\n') && !diagnostic.is_empty() {
             eprintln!();
         }
         return Ok(ExitCode::from(2));
     }
+
+    // The seam means the paste was accepted. A refusal returns above, without it.
+    show_handoff();
 
     let status = bash(&["--noprofile", "--norc"])
         .arg(&files.runner)
@@ -135,6 +140,17 @@ fn execute(script: &str) -> Result<ExitCode, String> {
         .status()
         .map_err(bash_missing)?;
     Ok(exit_code(status))
+}
+
+fn show_handoff() {
+    if !std::io::IsTerminal::is_terminal(&std::io::stdin()) {
+        return;
+    }
+    let Ok(mut tty) = File::options().write(true).open("/dev/tty") else {
+        return;
+    };
+    let line = style::handoff(&style::Ink::tty());
+    let _ = writeln!(tty, "{line}");
 }
 
 fn heredoc_left_open(diagnostic: &str) -> bool {

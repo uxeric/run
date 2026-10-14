@@ -13,7 +13,12 @@ for s in "${ps[@]}"; do
   fi
 done
 cmd=${cmd%"${cmd##*[![:space:]]}"}
-printf "run: exited %s\n%s\n" "$status" "$cmd" >&2
+# Hot #ff2a6d, the same mark as the prompt. Piped stderr stays plain.
+if [[ -t 2 && -z ${NO_COLOR:-} ]]; then
+  printf "\033[38;2;255;42;109mrun: exited %s\033[0m\n%s\n" "$status" "$cmd" >&2
+else
+  printf "run: exited %s\n%s\n" "$status" "$cmd" >&2
+fi
 exit "$status"
 ' ERR
 source "$1"

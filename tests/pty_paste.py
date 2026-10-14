@@ -34,8 +34,11 @@ def main():
         os.environ.pop("BASH_ENV", None)
         os.environ.pop("SHELLOPTS", None)
         os.environ.pop("BASHOPTS", None)
-        os.environ["NO_COLOR"] = "1"
         os.environ["RUN_NO_UPDATE_CHECK"] = "1"
+        if mode == "color":
+            os.environ.pop("NO_COLOR", None)
+        else:
+            os.environ["NO_COLOR"] = "1"
         os.execv(bin_path, [bin_path])
 
     shown = b""
@@ -59,6 +62,10 @@ def main():
         payload = b"printf 'OUT_C\\n'\r\n\x04"
     elif mode == "backspace":
         payload = b"printf 'Z\x7fOUT_D\\n'\r\n\x04"
+    elif mode == "color":
+        payload = b"printf 'OUT_E\\n'\r\nfalse\r\n\x04"
+    elif mode == "refuse":
+        payload = b"echo RAN\r\necho 'hello\r\n\x04"
     else:
         sys.stderr.write(f"unknown mode {mode}\n")
         os.kill(pid, 9)

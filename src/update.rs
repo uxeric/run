@@ -58,6 +58,7 @@ pub fn offer_if_newer() -> Result<(), String> {
         &remote,
         &mut stdin.lock(),
         &mut std::io::stderr(),
+        crate::style::Ink::stderr().enabled(),
     ) {
         return Ok(());
     }
@@ -69,9 +70,11 @@ pub fn wants_update(
     remote: &str,
     input: &mut impl BufRead,
     mut err: impl Write,
+    color: bool,
 ) -> bool {
-    let _ = writeln!(err, "run: a new version is ready.");
-    let _ = writeln!(err, "  {installed} → {remote}");
+    let ink = crate::style::Ink::on(color);
+    let _ = writeln!(err, "{} a new version is ready.", ink.hot("run:"));
+    let _ = writeln!(err, "  {installed} {} {remote}", ink.ice("→"));
     let _ = writeln!(err, "Press Enter to update, or n to keep this version.");
     let mut line = String::new();
     match input.read_line(&mut line) {
@@ -189,47 +192,69 @@ mod tests {
             "abc1234",
             "def5678",
             &mut Cursor::new("\n"),
-            &mut shown
+            &mut shown,
+            false
         ));
         let text = String::from_utf8(shown).unwrap();
         assert!(text.contains("abc1234"), "{text}");
         assert!(text.contains("def5678"), "{text}");
         assert!(text.contains("Press Enter to update"), "{text}");
         assert!(text.contains("n to keep this version"), "{text}");
+        assert!(!text.contains('\u{1b}'), "{text}");
+
+        let mut colored = Vec::new();
+        assert!(!wants_update(
+            "abc1234",
+            "def5678",
+            &mut Cursor::new("n\n"),
+            &mut colored,
+            true
+        ));
+        let text = String::from_utf8(colored).unwrap();
+        assert!(text.contains("abc1234"), "{text}");
+        assert!(text.contains("def5678"), "{text}");
+        assert!(text.contains("Press Enter to update"), "{text}");
+        assert!(text.contains("\u{1b}[38;2;255;42;109mrun:"), "{text}");
+        assert!(text.contains("\u{1b}[38;2;41;240;255m→"), "{text}");
 
         let silent = std::io::sink;
         assert!(wants_update(
             "a",
             "b",
             &mut Cursor::new("y\n"),
-            &mut silent()
+            &mut silent(),
+            false
         ));
         assert!(wants_update(
             "a",
             "b",
             &mut Cursor::new("yes\n"),
-            &mut silent()
+            &mut silent(),
+            false
         ));
         assert!(!wants_update(
             "a",
             "b",
             &mut Cursor::new("n\n"),
-            &mut silent()
+            &mut silent(),
+            false
         ));
         assert!(!wants_update(
             "a",
             "b",
             &mut Cursor::new("no\n"),
-            &mut silent()
+            &mut silent(),
+            false
         ));
         assert!(!wants_update(
             "a",
             "b",
             &mut Cursor::new("later\n"),
-            &mut silent()
+            &mut silent(),
+            false
         ));
         assert!(
-            !wants_update("a", "b", &mut Cursor::new(""), &mut silent()),
+            !wants_update("a", "b", &mut Cursor::new(""), &mut silent(), false),
             "a closed prompt does not update"
         );
     }
