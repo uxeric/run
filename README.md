@@ -57,6 +57,10 @@ A newer version asks before it replaces this one. Enter installs it and continue
 > **Does the comment run?**<br>
 > No. `#` is ignored, including after a command. Text inside quotes and heredocs is kept.
 
+> [!NOTE]
+> **What does `gh run watch` wait for?**<br>
+> The workflow run started by the last `git push` in that repository. The paste stops if the run fails. A watch that already names a run id keeps that id.
+
 > [!IMPORTANT]
 > **What if the heredoc never closes?**<br>
 > Nothing runs. Add the closing line and paste again.

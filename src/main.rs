@@ -25,10 +25,16 @@ Comments (#) are ignored. Commands share one shell, so cd persists.
 The run stops at the first command that exits non-zero.
 A heredoc that is never closed is refused, and nothing runs.
 
+A bare `gh run watch` after a git push waits for the workflow run that
+push started, and the paste stops if the run fails. A watch that names
+a run id keeps that id.
+
 Before the paste, run checks for a newer version. Enter installs it
 and continues. n keeps this version.
 
 RUN_NO_UPDATE_CHECK  Set to skip the update check.
+RUN_WATCH_TRIES      How many times to look for the run (default 20).
+RUN_WATCH_INTERVAL   Seconds between looks (default 3).
 ";
 
 fn main() -> ExitCode {
